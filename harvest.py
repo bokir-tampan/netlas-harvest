@@ -114,7 +114,7 @@ def probe(host):
 
 def main():
     dork = os.environ.get("DORK", 'http.title:"New API"')
-    pages = int(os.environ.get("PAGES", "3"))
+    pages = int(os.environ.get("PAGES") or "3")
     do_probe = os.environ.get("PROBE", "1") == "1"
 
     print(f"[*] dork: {dork!r} pages: {pages}", flush=True)

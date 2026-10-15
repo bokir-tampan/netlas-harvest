@@ -4,19 +4,23 @@ on:
   workflow_dispatch:
     inputs:
       pages:
-        description: "Netlas pages per dork"
+        description: "Pages per dork"
+        required: false
         default: "3"
       probe:
-        description: "Probe /v1/models on found hosts (1/0)"
+        description: "Probe /v1/models on discovered hosts (1/0)"
+        required: false
         default: "1"
+  push:
+    branches: [main]
+    paths: ["trigger.txt"]
 
 jobs:
   harvest:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     strategy:
       fail-fast: false
-      max-parallel: 24
       matrix:
         dork:
           - 'http.title:"New API"'
@@ -27,10 +31,9 @@ jobs:
           - 'http.title:"LocalAI"'
           - 'http.title:"text-generation-webui"'
           - 'http.title:"LobeChat"'
-          - 'http.title:"LibreChat"'
-          - 'http.title:"AnythingLLM"'
-          - 'http.title:"Dify"'
+          - 'http.title:"ChatGPT-Next-Web"'
           - 'http.title:"vLLM"'
+          - 'http.title:"FastChat"'
           - 'http.title:"KoboldAI"'
           - 'http.title:"ComfyUI"'
           - 'http.html:"v1/chat/completions"'
@@ -38,21 +41,20 @@ jobs:
           - 'port:11434 AND http.html:"api/tags"'
           - 'port:8000 AND http.html:"v1/models"'
           - 'port:1234 AND http.html:"v1/models"'
+          - 'port:8080 AND http.html:"v1/chat/completions"'
           - 'port:3000 AND http.html:"v1/models"'
-          - 'port:5000 AND http.html:"v1/models"'
-          - 'http.title:"FastChat"'
-          - 'http.title:"Xinference"'
-          - 'http.title:"GPT4Free"'
-
-    env:
-      DORK: ${{ matrix.dork }}
-      PAGES: ${{ inputs.pages }}
-      PROBE: ${{ inputs.probe }}
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Harvest + probe
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Harvest
+        env:
+          DORK: ${{ matrix.dork }}
+          PAGES: ${{ inputs.pages || '3' }}
+          PROBE: ${{ inputs.probe || '1' }}
         run: python3 harvest.py
 
       - name: Upload artifact
@@ -62,4 +64,4 @@ jobs:
           name: out-${{ strategy.job-index }}
           path: out.json
           if-no-files-found: warn
-          retention-days: 3
+          retention-days: 7
