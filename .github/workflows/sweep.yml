@@ -1,0 +1,43 @@
+name: Port 3000 Sweep — Matrix 20 Shards
+
+on:
+  workflow_dispatch:
+    inputs:
+      shard_count:
+        description: "Number of shards to run (max 20)"
+        required: false
+        default: "20"
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: [00, 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sweep shard
+        env:
+          SHARD: shard-${{ matrix.shard }}
+        run: |
+          echo "Starting sweep for $SHARD"
+          python3 sweep.py
+          echo "Sweep complete"
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sweep-result-${{ matrix.shard }}
+          path: result-shard-${{ matrix.shard }}.json
+          retention-days: 7
+          if-no-files-found: warn
