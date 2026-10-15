@@ -1,0 +1,67 @@
+name: model-hunt
+
+on:
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: "Pages per dork"
+        required: false
+        default: "1"
+
+jobs:
+  hunt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        dork:
+          # upstream relay fingerprints that expose these model families
+          - 'http.html:"step-3.7-flash"'
+          - 'http.html:"nemotron-3-ultra"'
+          - 'http.html:"glm-5.3-flash"'
+          - 'http.html:"claude-opus-4-6"'
+          - 'http.html:"claude-sonnet-4-6"'
+          - 'http.html:"grok-4.6"'
+          - 'http.html:"grok-4.7"'
+          - 'http.html:"deepseek-v4.1-flash"'
+          - 'http.html:"qwen3.7-max"'
+          - 'http.html:"qwen3.7-plus"'
+          - 'http.html:"minimax-m2.7"'
+          - 'http.html:"big-pickle"'
+          - 'http.html:"longcat"'
+          - 'http.html:"mimo-v2.6-flash"'
+          - 'http.html:"step-5-preview"'
+          - 'http.html:"jerouter"'
+          - 'http.html:"laguna-xs-2.1"'
+          - 'http.html:"nemotron-3-super"'
+          - 'http.html:"dots-3-note-preview"'
+          - 'http.html:"north-mini-code"'
+          # api-shape fingerprints
+          - 'http.html:"v1/models" AND http.html:"step-3.7"'
+          - 'http.html:"v1/models" AND http.html:"nemotron"'
+          - 'http.html:"v1/models" AND http.html:"grok-4"'
+          - 'http.html:"v1/models" AND http.html:"claude-opus-4-6"'
+          - 'http.title:"API" AND http.html:"nemotron-3"'
+          - 'http.title:"Relay" AND http.html:"v1/models"'
+          - 'http.title:"Router" AND http.html:"v1/models"'
+          - 'http.title:"中转" AND http.html:"v1/models"'
+          - 'http.html:"sk-" AND http.html:"step-3.7-flash"'
+          - 'http.html:"Bearer" AND http.html:"nemotron-3-ultra"'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Harvest
+        env:
+          DORK: ${{ matrix.dork }}
+          PAGES: ${{ inputs.pages || '1' }}
+          PROBE: "1"
+        run: python3 harvest.py
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: out-${{ job.number }}
+          path: out.json
+          if-no-files-found: warn
+          retention-days: 7
