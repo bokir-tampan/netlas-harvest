@@ -4,7 +4,7 @@ import json, sys, socket, ssl, time, os
 import urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-SHARD = os.environ.get("SHARD", "shard-00")
+SHARD = os.environ.get("SHARD", "shard-0")
 PORT = 3000
 CONCURRENCY = 500
 TCP_TIMEOUT = 1.2
