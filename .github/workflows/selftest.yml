@@ -1,0 +1,14 @@
+name: selftest
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: hello
+        run: |
+          echo "runner ok"
+          python3 -c "import urllib.request,json;r=urllib.request.urlopen('https://api.ipify.org');print('exit_ip',r.read().decode())"
