@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Sweep shard for port 3000 + HTTP verify /v1/models + /register."""
-import json, sys, socket, ssl, time, os
+import json, sys, socket, ssl, time, os, signal
 import urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -9,6 +9,9 @@ PORT = 3000
 CONCURRENCY = 500
 TCP_TIMEOUT = 1.2
 HTTP_TIMEOUT = 6
+# hard wall-clock cap per host for the whole 3-request probe
+HOST_BUDGET = 20
+socket.setdefaulttimeout(HTTP_TIMEOUT)
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0"}
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -22,7 +25,70 @@ def tcp_check(ip, port=PORT):
     except:
         return None
 
+def http_get_bounded(ip, port, path, read_bytes=10000, budget=HOST_BUDGET):
+    """Raw socket GET with hard wall-clock budget. Returns (status, body) or ('ERR', None)."""
+    import select
+    t0 = time.time()
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(TCP_TIMEOUT)
+    try:
+        s.connect((ip, port))
+        s.sendall((f"GET {path} HTTP/1.1\r\nHost: {ip}:{port}\r\n"
+                   f"User-Agent: Mozilla/5.0\r\nConnection: close\r\nAccept: */*\r\n\r\n").encode())
+        buf = b""
+        while len(buf) < read_bytes:
+            remaining = budget - (time.time() - t0)
+            if remaining <= 0: return ("TIMEOUT", None)
+            r, _, _ = select.select([s], [], [], min(remaining, 2.0))
+            if not r:
+                if b"\r\n\r\n" in buf: break  # headers done, body optional
+                continue
+            chunk = s.recv(8192)
+            if not chunk: break
+            buf += chunk
+            if b"\r\n\r\n" in buf and len(buf) > read_bytes: break
+        if not buf: return ("EMPTY", None)
+        head, _, body = buf.partition(b"\r\n\r\n")
+        status = 0
+        try: status = int(head.split(b" ")[1])
+        except: pass
+        return (status, body[:read_bytes].decode("utf-8", "ignore"))
+    except Exception as e:
+        return ("ERR", None)
+    finally:
+        s.close()
+
 def http_probe(ip, port=PORT):
+    result = {"ip": ip, "port": port, "models": None, "register": None, "panel": None, "chat_401": False}
+    # /v1/models
+    st, body = http_get_bounded(ip, port, "/v1/models", 10000)
+    if st == 200 and body and ('"data"' in body or '"models"' in body):
+        import re
+        ids = re.findall(r'"(?:id|name)"\s*:\s*"([^"]+)"', body)
+        result["models"] = len(ids) if ids else -1
+    elif st == 401:
+        result["chat_401"] = True
+    # /register
+    st, body = http_get_bounded(ip, port, "/register", 5000)
+    result["register"] = str(st) if isinstance(st, int) else st
+    if st == 200 and body:
+        import re
+        m = re.search(r"<title>([^<]{1,80})", body)
+        if m: result["panel"] = m.group(1).strip()[:80]
+        if any(x in body.lower() for x in ["__nuxt","__next","react","vue","app.js","bundle.js","assets/index"]):
+            result["panel"] = (result["panel"] or "") + " [SPA]"
+    # / root (if no panel yet)
+    if not result["panel"]:
+        st, body = http_get_bounded(ip, port, "/", 5000)
+        if st == 200 and body:
+            import re
+            m = re.search(r"<title>([^<]{1,80})", body)
+            if m: result["panel"] = m.group(1).strip()[:80]
+            if any(x in body.lower() for x in ["__nuxt","__next","react","vue","app.js","bundle.js"]):
+                result["panel"] = (result["panel"] or "") + " [SPA]"
+    return result
+
+def _http_probe(ip, port=PORT):
     base_url = f"http://{ip}:{port}"
     result = {"ip": ip, "port": port, "models": None, "register": None, "panel": None, "chat_401": False}
     # /v1/models (no auth)
@@ -88,18 +154,26 @@ def main():
     tcp_time = time.time() - t0
     print(f"[{SHARD}] TCP: {len(alive)}/{len(ips)} alive in {tcp_time:.0f}s", flush=True)
 
-    # phase 2: HTTP verify
+    # phase 2: HTTP verify — hard per-host budget so one tarpit can't stall the shard
     t1 = time.time()
     results = []
     with ThreadPoolExecutor(max_workers=50) as ex:
         futs = {ex.submit(http_probe, ip): ip for ip in alive}
-        for fut in as_completed(futs):
-            try:
-                results.append(fut.result())
-            except:
-                pass
+        try:
+            for fut in as_completed(futs, timeout=HOST_BUDGET):
+                try:
+                    results.append(fut.result())
+                except:
+                    pass
+        except TimeoutError:
+            # leave stragglers behind rather than stall to the runner timeout
+            pass
+    # cancel anything still running
+    for f in futs:
+        try: f.cancel()
+        except: pass
     http_time = time.time() - t1
-    print(f"[{SHARD}] HTTP: done in {http_time:.0f}s", flush=True)
+    print(f"[{SHARD}] HTTP: {len(results)}/{len(alive)} done in {http_time:.0f}s", flush=True)
 
     # output
     out = {
