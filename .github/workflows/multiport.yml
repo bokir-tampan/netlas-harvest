@@ -1,0 +1,24 @@
+name: Multi-Port Sweep — vLLM / Ollama / xinference
+on:
+  workflow_dispatch:
+    inputs:
+      ips_file:
+        description: 'JSON file with IP list (default ips.json)'
+        default: 'ips.json'
+
+jobs:
+  multiport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sweep ports 8000/8080/11434/8001/5000
+        run: |
+          python3 multiport.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: multiport-result
+          path: result.json
+          retention-days: 7
