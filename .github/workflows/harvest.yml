@@ -1,0 +1,65 @@
+name: netlas-harvest
+
+on:
+  workflow_dispatch:
+    inputs:
+      pages:
+        description: "Netlas pages per dork"
+        default: "3"
+      probe:
+        description: "Probe /v1/models on found hosts (1/0)"
+        default: "1"
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 24
+      matrix:
+        dork:
+          - 'http.title:"New API"'
+          - 'http.title:"One API"'
+          - 'http.title:"LiteLLM"'
+          - 'http.title:"Open WebUI"'
+          - 'http.title:"Ollama is running"'
+          - 'http.title:"LocalAI"'
+          - 'http.title:"text-generation-webui"'
+          - 'http.title:"LobeChat"'
+          - 'http.title:"LibreChat"'
+          - 'http.title:"AnythingLLM"'
+          - 'http.title:"Dify"'
+          - 'http.title:"vLLM"'
+          - 'http.title:"KoboldAI"'
+          - 'http.title:"ComfyUI"'
+          - 'http.html:"v1/chat/completions"'
+          - 'http.html:"v1/models"'
+          - 'port:11434 AND http.html:"api/tags"'
+          - 'port:8000 AND http.html:"v1/models"'
+          - 'port:1234 AND http.html:"v1/models"'
+          - 'port:3000 AND http.html:"v1/models"'
+          - 'port:5000 AND http.html:"v1/models"'
+          - 'http.title:"FastChat"'
+          - 'http.title:"Xinference"'
+          - 'http.title:"GPT4Free"'
+
+    env:
+      DORK: ${{ matrix.dork }}
+      PAGES: ${{ inputs.pages }}
+      PROBE: ${{ inputs.probe }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Harvest + probe
+        run: python3 harvest.py
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: out-${{ strategy.job-index }}
+          path: out.json
+          if-no-files-found: warn
+          retention-days: 3
