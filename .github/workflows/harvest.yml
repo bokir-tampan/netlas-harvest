@@ -6,7 +6,7 @@ on:
       pages:
         description: "Pages per dork"
         required: false
-        default: "3"
+        default: "6"
       probe:
         description: "Probe /v1/models on discovered hosts (1/0)"
         required: false
@@ -73,7 +73,7 @@ jobs:
       - name: Harvest
         env:
           DORK: ${{ matrix.dork }}
-          PAGES: ${{ inputs.pages || '3' }}
+          PAGES: ${{ inputs.pages || '6' }}
           PROBE: ${{ inputs.probe || '1' }}
         run: python3 harvest.py
 

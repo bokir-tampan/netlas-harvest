@@ -57,13 +57,23 @@ def netlas_page(query, start, size=100, retries=3):
 
 def harvest(dork, pages):
     hosts = {}
+    start = 0
+    prev_keys = set()
     for page in range(pages):
         try:
-            data = netlas_page(dork, page * 100)
+            data = netlas_page(dork, start)
         except Exception as exc:
-            print(f"[!] page {page} failed: {exc}", file=sys.stderr)
+            print(f"[!] page {page} (start={start}) failed: {exc}", file=sys.stderr)
             break
         items = data.get("items", [])
+        if not items:
+            print(f"[*] page {page} (start={start}): empty, stop", flush=True)
+            break
+        keys = {f'{it.get("data", {}).get("ip")}:{it.get("data", {}).get("port")}' for it in items}
+        if keys <= prev_keys:
+            print(f"[*] page {page} (start={start}): all duplicates, stop", flush=True)
+            break
+        prev_keys |= keys
         for it in items:
             dd = it.get("data", {})
             ip, port = dd.get("ip"), dd.get("port")
@@ -77,9 +87,8 @@ def harvest(dork, pages):
                 "isp": (dd.get("isp") or "")[:40],
                 "country": geo.get("country", ""),
             }
-        print(f"[*] page {page}: +{len(items)} (total {len(hosts)})", flush=True)
-        if len(items) < 100:
-            break
+        start += len(items)
+        print(f"[*] page {page} (start={start-len(items)}): +{len(items)} (total {len(hosts)})", flush=True)
     return hosts
 
 
