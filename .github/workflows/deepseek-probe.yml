@@ -1,0 +1,32 @@
+name: deepseek-probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      email_prefix:
+        description: 'naytra email user prefix'
+        required: false
+        default: 'dstest01'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe DeepSeek platform from runner IP
+        run: |
+          echo "=== runner egress IP ==="
+          curl -s --max-time 15 https://api.ipify.org; echo
+          echo "=== GET sign_up page ==="
+          curl -s --max-time 20 -o /tmp/signup.html -w 'HTTP:%{http_code} SIZE:%{size_download}\n' \
+            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' \
+            https://platform.deepseek.com/sign_up
+          head -c 500 /tmp/signup.html; echo
+          echo "=== POST register probe ==="
+          curl -s --max-time 20 -w '\nHTTP:%{http_code}\n' \
+            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0' \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"${{ inputs.email_prefix }}@naytra.email","password":"Ds!2026xK9mQz7vL"}' \
+            https://platform.deepseek.com/api/v1/auth/register | head -c 600; echo
+          echo "=== naytra inbox API check ==="
+          curl -s --max-time 15 "https://mail.naytra.net/api/inbox/${{ inputs.email_prefix }}" | head -c 300; echo
